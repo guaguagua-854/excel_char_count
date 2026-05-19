@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Excel字数统计工具（防卡死版）</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      padding: 20px;
+    }
+    .container {
+      background: white;
+      border-radius: 20px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+      padding: 40px;
+      max-width: 900px;
+      width: 100%;
+    }
+    h1 {
+      text-align: center;
+      color: #333;
+      margin-bottom: 10px;
+      font-size: 28px;
+    }
+    .subtitle {
+      text-align: center;
+      color: #666;
+      margin-bottom: 30px;
+      font-size: 14px;
+    }
+    .upload-zone {
+      border: 3px dashed #667eea;
+      border-radius: 15px;
+      padding: 60px 20px;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.3s;
+      background: #f8f9ff;
+    }
+    .upload-zone:hover {
+      border-color: #764ba2;
+      background: #f0f2ff;
+      transform: translateY(-2px);
+    }
+    .upload-zone.dragging {
+      border-color: #48bb78;
+      background: #f0fff4;
+      transform: scale(1.02);
+    }
+    .upload-icon {
+      font-size: 64px;
+      margin-bottom: 15px;
+    }
+    .upload-text {
+      font-size: 18px;
+      color: #667eea;
+      font-weight: 600;
+      margin-bottom: 8px;
+    }
+    .upload-hint {
+      font-size: 14px;
+      color: #999;
+    }
+    #fileInput { display: none; }
+    .loading {
+      text-align: center;
+      padding: 20px;
+      color: #667eea;
+      font-size: 16px;
+      display: none;
+    }
+    .loading.active { display: block; }
+    .spinner {
+      display: inline-block;
+      width: 20px;
+      height: 20px;
+      border: 3px solid #f3f3f3;
+      border-top: 3px solid #667eea;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+    }
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+    .error {
+      text-align: center;
+      padding: 20px;
+      color: #e53e3e;
+      font-size: 16px;
+      display: none;
+    }
+    .error.active { display: block; }
+
+    /* 总分卡片 */
+    .total-card {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      border-radius: 15px;
+      padding: 30px;
+      text-align: center;
+      margin: 30px 0;
+      display: none;
+      animation: fadeInUp 0.5s ease;
+    }
+    .total-card.active { display: block; }
+    @keyframes fadeInUp {
+      from { opacity: 0; transform: translateY(20px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .total-label {
+      font-size: 18px;
+      opacity: 0.9;
+      margin-bottom: 10px;
+    }
+    .total-number {
+      font-size: 48px;
+      font-weight: bold;
+      margin: 10px 0 20px;
+    }
+    .copy-btn {
+      background: white;
+      color: #667eea;
+      border: none;
+      padding: 12px 30px;
+      border-radius: 25px;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.3s;
+    }
+    .copy-btn:hover {
+      transform: scale(1.05);
+      box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+    }
+    .copy-btn.copied {
+      background: #48bb78;
+      color: white;
+    }
+
+    /* Sheet 分项 */
+    .stats {
+      display: none;
+      margin-top: 20px;
+    }
+    .stats.active { display: block; }
+    .stat-item {
+      background: #f7fafc;
+      border-radius: 12px;
+      padding: 20px;
+      margin-bottom: 15px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      transition: all 0.3s;
+      border: 2px solid transparent;
+    }
+    .stat-item:hover {
+      border-color: #667eea;
+      transform: translateX(5px);
+    }
+    .file-name {
+      font-size: 14px;
+      color: #718096;
+      margin-bottom: 5px;
+    }
+    .sheet-name {
+      font-size: 18px;
+      color: #2d3748;
+      font-weight: 600;
+    }
+    .word-count {
+      font-size: 24px;
+      font-weight: bold;
+      color: #667eea;
+      margin-right: 15px;
+    }
+    .copy-btn-small {
+      background: #667eea;
+      color: white;
+      border: none;
+      padding: 8px 20px;
+      border-radius: 20px;
+      font-size: 14px;
+      cursor: pointer;
+      transition: all 0.3s;
+    }
+    .copy-btn-small:hover {
+      background: #764ba2;
+      transform: scale(1.05);
+    }
+    .copy-btn-small.copied {
+      background: #48bb78;
+    }
+
+    /* 删除按钮 */
+    .delete-btn {
+      background: #fc8181;
+      color: white;
+      border: none;
+      padding: 8px 16px;
+      border-radius: 20px;
+      font-size: 14px;
+      cursor: pointer;
+      transition: all 0.3s;
+      margin-left: 10px;
+    }
+    .delete-btn:hover {
+      background: #e53e3e;
+      transform: scale(1.05);
+    }
+
+    .footer {
+      text-align: center;
+      margin-top: 30px;
+      color: #a0aec0;
+      font-size: 14px;
+    }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useRef } = React;
+
+    function App() {
+      const [isLoading, setIsLoading] = useState(false);
+      const [error, setError] = useState('');
+      const [stats, setStats] = useState([]);
+      const [totalCount, setTotalCount] = useState(0);
+      const [copiedId, setCopiedId] = useState(null);
+      const fileInputRef = useRef(null);
+
+      const copyToClipboard = (text, id) => {
+        navigator.clipboard.writeText(text).then(() => {
+          setCopiedId(id);
+          setTimeout(() => setCopiedId(null), 2000);
+        }).catch(() => {
+          const textarea = document.createElement('textarea');
+          textarea.value = text;
+          document.body.appendChild(textarea);
+          textarea.select();
+          document.execCommand('copy');
+          document.body.removeChild(textarea);
+          setCopiedId(id);
+          setTimeout(() => setCopiedId(null), 2000);
+        });
+      };
+
+      const processFile = async (file) => {
+        setIsLoading(true);
+        setError('');
+        setStats([]);
+        setTotalCount(0);
+        setCopiedId(null);
+
+        try {
+          const data = await file.arrayBuffer();
+          const workbook = XLSX.read(data, { type: 'array' });
+
+          let allStats = [];
+          let total = 0;
+
+          for (let i = 0; i < workbook.SheetNames.length; i++) {
+            await new Promise(r => setTimeout(r, 50));
+
+            const sheetName = workbook.SheetNames[i];
+            const worksheet = workbook.Sheets[sheetName];
+            const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: '' });
+
+            let count = 0;
+            for (let row of jsonData) {
+              for (let cell of row) {
+                if (cell !== null && cell !== undefined) {
+                  count += String(cell).length;
+                }
+              }
+            }
+
+            allStats.push({
+              fileName: file.name,
+              sheetName: sheetName,
+              count: count,
+              index: i
+            });
+            total += count;
+          }
+
+          setStats(allStats);
+          setTotalCount(total);
+        } catch (err) {
+          setError('❌ 文件解析失败：' + err.message);
+        } finally {
+          setIsLoading(false);
+        }
+      };
+
+      const handleFileUpload = (e) => {
+        const files = e.target.files;
+        if (files.length > 0) {
+          processFile(files[0]);
+        }
+      };
+
+      const handleDrop = (e) => {
+        e.preventDefault();
+        e.currentTarget.classList.remove('dragging');
+        const files = e.dataTransfer.files;
+        if (files.length > 0) {
+          processFile(files[0]);
+        }
+      };
+
+      const handleDragOver = (e) => {
+        e.preventDefault();
+        e.currentTarget.classList.add('dragging');
+      };
+
+      const handleDragLeave = (e) => {
+        e.currentTarget.classList.remove('dragging');
+      };
+
+      const deleteSheet = (index) => {
+        setStats(prev => {
+          const newStats = prev.filter((_, i) => i !== index);
+          const newTotal = newStats.reduce((sum, s) => sum + s.count, 0);
+          setTotalCount(newTotal);
+          return newStats;
+        });
+      };
+
+      return (
+        <div className="container">
+          <h1>📊 Excel字数统计工具</h1>
+          <div className="subtitle">支持 .xlsx / .xls 文件 | 可删除Sheet动态更新字数</div>
+
+          <div
+            className={`upload-zone ${isLoading ? 'dragging' : ''}`}
+            onClick={() => fileInputRef.current.click()}
+            onDrop={handleDrop}
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+          >
+            <div className="upload-icon">📁</div>
+            <div className="upload-text">点击上传或拖拽文件到此处</div>
+            <div className="upload-hint">支持 .xlsx / .xls 格式</div>
+          </div>
+
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".xlsx,.xls"
+            onChange={handleFileUpload}
+            id="fileInput"
+          />
+
+          <div className={`loading ${isLoading ? 'active' : ''}`}>
+            <span className="spinner"></span>
+            正在解析文件，请稍候...
+          </div>
+
+          <div className={`error ${error ? 'active' : ''}`}>
+            {error}
+          </div>
+
+          {/* 总分卡片 */}
+          {totalCount > 0 && (
+            <div className="total-card active">
+              <div className="total-label">📈 整个Excel文件合计字数</div>
+              <div className="total-number">{totalCount.toLocaleString()}</div>
+              <button
+                className={`copy-btn ${copiedId === 'total' ? 'copied' : ''}`}
+                onClick={() => copyToClipboard(totalCount.toString(), 'total')}
+              >
+                {copiedId === 'total' ? '✅ 已复制！' : '📋 复制总字数'}
+              </button>
+            </div>
+          )}
+
+          {/* Sheet 分项 */}
+          <div className={`stats ${stats.length > 0 ? 'active' : ''}`}>
+            {stats.map((stat, index) => (
+              <div className="stat-item" key={index}>
+                <div>
+                  <div className="file-name">📄 {stat.fileName}</div>
+                  <div className="sheet-name">📋 {stat.sheetName}</div>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <div className="word-count">{stat.count.toLocaleString()} 字</div>
+                  <button
+                    className={`copy-btn-small ${copiedId === index ? 'copied' : ''}`}
+                    onClick={() => copyToClipboard(stat.count.toString(), index)}
+                  >
+                    {copiedId === index ? '✅ 已复制！' : '📋 复制'}
+                  </button>
+                  <button
+                    className="delete-btn"
+                    onClick={() => deleteSheet(index)}
+                    title="删除此Sheet"
+                  >
+                    🗑️ 删除
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div className="footer">
+            💡 提示：点击 🗑️ 删除按钮可移除Sheet，总字数会自动更新
+          </div>
+        </div>
+      );
+    }
+
+    ReactDOM.render(<App />, document.getElementById('root'));
+  </script>
+</body>
+</html>
