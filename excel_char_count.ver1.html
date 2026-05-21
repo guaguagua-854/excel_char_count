@@ -3,8 +3,9 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Excel字数统计工具（Word标准版）</title>
+  <title>Excel/PPT字数统计工具（Word标准版）</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
   <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
@@ -70,7 +71,7 @@
       color: #999;
     }
     input[type="file"] { display: none; }
-    .sheet-item {
+    .item {
       background: #f8f9fa;
       border-radius: 10px;
       padding: 15px;
@@ -80,11 +81,11 @@
       align-items: center;
       transition: all 0.3s;
     }
-    .sheet-item:hover {
+    .item:hover {
       background: #e9ecef;
       transform: translateX(5px);
     }
-    .sheet-name {
+    .item-name {
       font-weight: 600;
       color: #333;
       font-size: 16px;
@@ -148,6 +149,16 @@
       background: #ff3838;
       transform: scale(1.05);
     }
+    .badge {
+      display: inline-block;
+      padding: 4px 12px;
+      border-radius: 12px;
+      font-size: 12px;
+      font-weight: 600;
+      margin-left: 10px;
+    }
+    .badge-excel { background: #48bb78; color: white; }
+    .badge-ppt { background: #ed8936; color: white; }
   </style>
 </head>
 <body>
@@ -161,16 +172,9 @@
       if (!text) return 0;
       
       const str = String(text);
-      
-      // 移除所有空白字符（空格、tab、换行等）
       const noSpaces = str.replace(/\s/g, '');
       
       if (noSpaces.length === 0) return 0;
-      
-      // Word规则：
-      // 1. 中文字符：每个算1个字
-      // 2. 英文/数字：连续的算1个字（如 "ABC123" = 1个字）
-      // 3. 标点符号：中文标点算1个字，英文标点通常不计
       
       let wordCount = 0;
       let i = 0;
@@ -179,7 +183,7 @@
         const char = noSpaces[i];
         const code = char.charCodeAt(0);
         
-        // 中文字符（Unicode范围）
+        // 中文字符
         if (code >= 0x4e00 && code <= 0x9fff) {
           wordCount++;
           i++;
@@ -195,20 +199,19 @@
           wordCount++;
           i++;
         }
-        // 英文/数字：跳过连续的英文和数字，算1个字
+        // 英文/数字：连续的算1个字
         else if (/[a-zA-Z0-9]/.test(char)) {
           wordCount++;
-          // 跳过连续的英文数字
           while (i < noSpaces.length && /[a-zA-Z0-9]/.test(noSpaces[i])) {
             i++;
           }
         }
-        // 中文标点（算1个字）
+        // 中文标点
         else if (/[，。！？、；：""''（）【】《》〈〉]/.test(char)) {
           wordCount++;
           i++;
         }
-        // 其他字符（英文标点等）不计入
+        // 其他字符不计入
         else {
           i++;
         }
@@ -217,47 +220,105 @@
       return wordCount;
     };
 
+    // ✅ 解析PPTX文件
+    const parsePPTX = async (file) => {
+      const zip = await JSZip.loadAsync(file);
+      const slides = [];
+      
+      // 遍历所有slide文件
+      const slideFiles = Object.keys(zip.files)
+        .filter(name => name.match(/^ppt\/slides\/slide\d+\.xml$/))
+        .sort((a, b) => {
+          const numA = parseInt(a.match(/slide(\d+)/)[1]);
+          const numB = parseInt(b.match(/slide(\d+)/)[1]);
+          return numA - numB;
+        });
+      
+      for (let slideFile of slideFiles) {
+        const content = await zip.files[slideFile].async('string');
+        
+        // 提取所有 <a:t> 标签内的文本
+        const textMatches = content.match(/<a:t>([^<]*)<\/a:t>/g);
+        
+        let slideText = '';
+        if (textMatches) {
+          slideText = textMatches
+            .map(match => match.replace(/<\/?a:t>/g, ''))
+            .join(' ');
+        }
+        
+        const slideNum = slideFile.match(/slide(\d+)/)[1];
+        slides.push({
+          name: `第${slideNum}页`,
+          text: slideText,
+          count: countWords(slideText)
+        });
+      }
+      
+      return slides;
+    };
+
     function App() {
-      const [sheets, setSheets] = useState([]);
+      const [items, setItems] = useState([]);
       const [fileName, setFileName] = useState('');
       const [isDragging, setIsDragging] = useState(false);
+      const [fileType, setFileType] = useState(''); // excel or ppt
       const fileInputRef = useRef(null);
 
-      const handleFile = (file) => {
+      const processFile = async (file) => {
         setFileName(file.name);
-        const reader = new FileReader();
-        reader.onload = (e) => {
-          const data = new Uint8Array(e.target.result);
-          const workbook = XLSX.read(data, { type: 'array' });
-          
-          const newSheets = workbook.SheetNames.map((name, index) => {
-            const worksheet = workbook.Sheets[name];
-            const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: '' });
+        setIsDragging(true);
+        
+        const ext = file.name.split('.').pop().toLowerCase();
+        
+        try {
+          if (ext === 'xlsx' || ext === 'xls') {
+            setFileType('excel');
+            const data = await file.arrayBuffer();
+            const workbook = XLSX.read(data, { type: 'array' });
             
-            let totalWords = 0;
-            jsonData.forEach(row => {
-              row.forEach(cell => {
-                totalWords += countWords(cell);
+            const newItems = workbook.SheetNames.map((name, index) => {
+              const worksheet = workbook.Sheets[name];
+              const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: '' });
+              
+              let totalWords = 0;
+              jsonData.forEach(row => {
+                row.forEach(cell => {
+                  totalWords += countWords(cell);
+                });
               });
+              
+              return {
+                type: 'sheet',
+                name,
+                count: totalWords,
+                index
+              };
             });
             
-            return {
-              name,
-              count: totalWords,
-              index
-            };
-          });
-          
-          setSheets(newSheets);
-        };
-        reader.readAsArrayBuffer(file);
+            setItems(newItems);
+          } 
+          else if (ext === 'pptx') {
+            setFileType('ppt');
+            const slides = await parsePPTX(file);
+            setItems(slides);
+          }
+          else {
+            alert('❌ 不支持的文件格式！请上传 .xlsx/.xls 或 .pptx 文件');
+          }
+        } catch (err) {
+          console.error(err);
+          alert('❌ 文件解析失败：' + err.message);
+        } finally {
+          setIsDragging(false);
+        }
       };
 
       const handleDrop = (e) => {
         e.preventDefault();
         setIsDragging(false);
         const file = e.dataTransfer.files[0];
-        if (file) handleFile(file);
+        if (file) processFile(file);
       };
 
       const handleDragOver = (e) => {
@@ -269,13 +330,13 @@
         setIsDragging(false);
       };
 
-      const deleteSheet = (index) => {
-        setSheets(sheets.filter((_, i) => i !== index));
+      const deleteItem = (index) => {
+        setItems(items.filter((_, i) => i !== index));
       };
 
-      const totalCount = sheets.reduce((sum, sheet) => sum + sheet.count, 0);
+      const totalCount = items.reduce((sum, item) => sum + item.count, 0);
 
-      const copyToClipboard = (text, id) => {
+      const copyToClipboard = (text) => {
         navigator.clipboard.writeText(text).then(() => {
           alert('✅ 已复制到剪贴板！');
         });
@@ -283,8 +344,8 @@
 
       return (
         <div className="container">
-          <h1>📊 Excel字数统计工具</h1>
-          <p className="subtitle">Word标准字数统计（与Word完全一致）</p>
+          <h1>📊 Office字数统计工具</h1>
+          <p className="subtitle">支持 Excel (.xlsx/.xls) 和 PPT (.pptx) | Word标准字数统计</p>
           
           <div 
             className={`upload-zone ${isDragging ? 'dragging' : ''}`}
@@ -294,39 +355,48 @@
             onDragLeave={handleDragLeave}
           >
             <div className="upload-icon">📁</div>
-            <div className="upload-text">点击或拖拽Excel文件到此处</div>
-            <div className="upload-hint">支持 .xlsx, .xls 格式</div>
+            <div className="upload-text">点击或拖拽文件到此处</div>
+            <div className="upload-hint">支持 Excel (.xlsx/.xls) 和 PPT (.pptx) 格式</div>
             <input
               ref={fileInputRef}
               type="file"
-              accept=".xlsx,.xls"
+              accept=".xlsx,.xls,.pptx"
               onChange={(e) => {
                 const file = e.target.files[0];
-                if (file) handleFile(file);
+                if (file) processFile(file);
               }}
             />
           </div>
 
-          {sheets.length > 0 && (
+          {items.length > 0 && (
             <>
               <div style={{ marginTop: '30px' }}>
-                <h2 style={{ marginBottom: '15px', color: '#333' }}>📄 {fileName}</h2>
-                {sheets.map((sheet, index) => (
-                  <div className="sheet-item" key={index}>
+                <h2 style={{ marginBottom: '15px', color: '#333' }}>
+                  📄 {fileName}
+                  <span className={`badge ${fileType === 'excel' ? 'badge-excel' : 'badge-ppt'}`}>
+                    {fileType === 'excel' ? '📊 Excel' : '📽️ PPT'}
+                  </span>
+                </h2>
+                
+                {items.map((item, index) => (
+                  <div className="item" key={index}>
                     <div>
-                      <div className="sheet-name">📋 Sheet{index + 1}: {sheet.name}</div>
+                      <div className="item-name">
+                        {item.type === 'sheet' ? '📋 Sheet: ' : '🎬 '}
+                        {item.name}
+                      </div>
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
-                      <div className="word-count">{sheet.count.toLocaleString()} 字</div>
+                      <div className="word-count">{item.count.toLocaleString()} 字</div>
                       <button
                         className="copy-btn"
-                        onClick={() => copyToClipboard(sheet.count.toString(), index)}
+                        onClick={() => copyToClipboard(item.count.toString())}
                       >
                         📋 复制
                       </button>
                       <button
                         className="delete-btn"
-                        onClick={() => deleteSheet(index)}
+                        onClick={() => deleteItem(index)}
                       >
                         🗑️ 删除
                       </button>
@@ -340,7 +410,7 @@
                 <div className="total-count">{totalCount.toLocaleString()} 字</div>
                 <button 
                   className="copy-btn"
-                  onClick={() => copyToClipboard(totalCount.toString(), 'total')}
+                  onClick={() => copyToClipboard(totalCount.toString())}
                   style={{ marginTop: '15px' }}
                 >
                   📋 复制总字数
@@ -350,7 +420,7 @@
           )}
 
           <div className="footer">
-            💡 提示：点击 🗑️ 删除按钮可移除Sheet，总字数会自动更新 | 字数统计规则与Word完全一致
+            💡 提示：支持 Excel 和 PPT 文件 | 字数统计规则与Word完全一致 | 点击 🗑️ 删除可移除Sheet/Slide
           </div>
         </div>
       );
