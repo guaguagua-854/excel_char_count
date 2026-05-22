@@ -1,669 +1,340 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Excel/PPT字数统计工具（Word标准版）</title>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
-  <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>📊 文件字数统计工具</title>
+  
+  <!-- 🎯 通过 CDN 引入库（不需要安装！） -->
+  <script src="https://cdn.jsdelivr.net/npm/mammoth@1.6.0/mammoth.browser.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/pptxgenjs@3.12.0/dist/pptxgen.bundle.js"></script>
+  
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
+    
     body {
-      font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif;
+      font-family: 'Microsoft YaHei', Arial, sans-serif;
       background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
       min-height: 100vh;
-      display: flex;
-      justify-content: center;
-      align-items: center;
       padding: 20px;
     }
+
     .container {
+      max-width: 700px;
+      margin: 50px auto;
       background: white;
       border-radius: 20px;
-      box-shadow: 0 20px 60px rgba(0,0,0,0.3);
       padding: 40px;
-      max-width: 900px;
-      width: 100%;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.3);
     }
+
     h1 {
       text-align: center;
       color: #333;
-      margin-bottom: 10px;
+      margin-bottom: 30px;
       font-size: 28px;
     }
-    .subtitle {
-      text-align: center;
-      color: #666;
-      margin-bottom: 20px;
-      font-size: 14px;
-    }
-    
-    /* 🎯 模式切换按钮 */
-    .mode-switcher {
+
+    /* 🎯 模式切换 */
+    .mode-switch {
       display: flex;
-      justify-content: center;
       gap: 10px;
-      margin-bottom: 30px;
-      background: #f0f2ff;
-      padding: 8px;
-      border-radius: 12px;
+      margin-bottom: 25px;
     }
+
     .mode-btn {
       flex: 1;
-      padding: 12px 20px;
-      border: none;
-      border-radius: 8px;
-      font-size: 14px;
-      font-weight: 600;
-      cursor: pointer;
-      transition: all 0.3s;
+      padding: 15px;
+      border: 2px solid #ddd;
       background: white;
-      color: #666;
+      border-radius: 10px;
+      cursor: pointer;
+      font-size: 16px;
+      transition: all 0.3s;
+      font-weight: bold;
     }
+
+    .mode-btn:hover {
+      border-color: #667eea;
+    }
+
     .mode-btn.active {
       background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
       color: white;
-      box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
-    }
-    .mode-btn:hover:not(.active) {
-      background: #e9ecef;
+      border-color: transparent;
     }
 
-    .upload-zone {
+    /* 📤 上传区域 */
+    .upload-area {
+      margin-bottom: 25px;
+    }
+
+    .upload-label {
+      display: block;
+      padding: 50px 20px;
+      background: #f8f9fa;
       border: 3px dashed #667eea;
       border-radius: 15px;
-      padding: 60px 20px;
       text-align: center;
       cursor: pointer;
-      transition: all 0.3s;
-      background: #f8f9ff;
-    }
-    .upload-zone:hover {
-      border-color: #764ba2;
-      background: #f0f2ff;
-      transform: translateY(-2px);
-    }
-    .upload-zone.dragging {
-      border-color: #48bb78;
-      background: #f0fff4;
-      transform: scale(1.02);
-    }
-    .upload-icon { font-size: 64px; margin-bottom: 15px; }
-    .upload-text {
       font-size: 18px;
-      color: #667eea;
-      font-weight: 600;
-      margin-bottom: 8px;
-    }
-    .upload-hint {
-      font-size: 14px;
-      color: #999;
-    }
-    input[type="file"] { display: none; }
-    
-    .item {
-      background: #f8f9fa;
-      border-radius: 10px;
-      padding: 15px;
-      margin-bottom: 10px;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
       transition: all 0.3s;
     }
-    .item:hover {
+
+    .upload-label:hover {
       background: #e9ecef;
+      border-color: #764ba2;
+    }
+
+    .upload-label input {
+      display: none;
+    }
+
+    /* ⏳ 加载中 */
+    .loading {
+      text-align: center;
+      padding: 20px;
+      font-size: 18px;
+      color: #666;
+      animation: pulse 1.5s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+
+    /* 📊 结果展示 */
+    .result {
+      margin-top: 20px;
+    }
+
+    .result-item {
+      display: flex;
+      align-items: center;
+      padding: 18px;
+      background: white;
+      margin-bottom: 12px;
+      border-radius: 12px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+      transition: transform 0.2s;
+    }
+
+    .result-item:hover {
       transform: translateX(5px);
     }
-    .item-name {
-      font-weight: 600;
-      color: #333;
-      font-size: 16px;
+
+    .result-item.total {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      font-size: 20px;
+      font-weight: bold;
     }
-    .word-count {
+
+    .result-icon {
+      font-size: 32px;
+      margin-right: 15px;
+    }
+
+    .result-name {
+      flex: 1;
+      font-size: 16px;
+      font-weight: 500;
+    }
+
+    .result-count {
       font-size: 20px;
       font-weight: bold;
       color: #667eea;
-      margin-left: 15px;
     }
-    .stats {
-      margin-top: 30px;
-      padding-top: 20px;
-      border-top: 2px solid #eee;
-    }
-    .total-section {
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-      color: white;
-      padding: 20px;
-      border-radius: 15px;
-      text-align: center;
-      margin-top: 20px;
-    }
-    .total-count {
-      font-size: 48px;
-      font-weight: bold;
-      margin: 10px 0;
-    }
-    .copy-btn {
-      background: white;
-      color: #667eea;
-      border: none;
-      padding: 10px 20px;
-      border-radius: 8px;
-      cursor: pointer;
-      font-size: 16px;
-      font-weight: 600;
-      transition: all 0.3s;
-    }
-    .copy-btn:hover {
-      transform: scale(1.05);
-      box-shadow: 0 5px 15px rgba(0,0,0,0.2);
-    }
-    .footer {
-      text-align: center;
-      color: #999;
-      font-size: 12px;
-      margin-top: 20px;
-    }
-    .delete-btn {
-      background: #ff4757;
-      color: white;
-      border: none;
-      padding: 8px 15px;
-      border-radius: 8px;
-      cursor: pointer;
-      font-size: 14px;
-      transition: all 0.3s;
-    }
-    .delete-btn:hover {
-      background: #ff3838;
-      transform: scale(1.05);
-    }
-    .badge {
-      display: inline-block;
-      padding: 4px 12px;
-      border-radius: 12px;
-      font-size: 12px;
-      font-weight: 600;
-      margin-left: 10px;
-    }
-    .badge-excel { background: #48bb78; color: white; }
-    .badge-ppt { background: #ed8936; color: white; }
-    .badge-multi { background: #9f7aea; color: white; }
 
-    /* 📋 多文件模式样式 */
-    .file-list {
-      background: #f8f9fa;
-      border-radius: 10px;
-      padding: 20px;
-      margin-bottom: 15px;
-    }
-    .file-item {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      padding: 12px;
-      background: white;
-      border-radius: 8px;
-      margin-bottom: 8px;
-      transition: all 0.3s;
-    }
-    .file-item:hover {
-      transform: translateX(5px);
-      box-shadow: 0 3px 10px rgba(0,0,0,0.1);
-    }
-    .file-info {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-    }
-    .file-icon {
-      font-size: 24px;
-    }
-    .file-name {
-      font-weight: 600;
-      color: #333;
-    }
-    .file-count {
-      font-size: 18px;
-      font-weight: bold;
-      color: #667eea;
-    }
-    .file-delete {
-      background: #ff4757;
+    .result-item.total .result-count {
       color: white;
-      border: none;
-      padding: 6px 12px;
-      border-radius: 6px;
-      cursor: pointer;
-      font-size: 12px;
-      transition: all 0.3s;
     }
-    .file-delete:hover {
-      background: #ff3838;
+
+    .hidden {
+      display: none;
     }
   </style>
 </head>
 <body>
-  <div id="root"></div>
 
-  <script type="text/babel">
-    const { useState, useRef } = React;
+<div class="container">
+  <h1>📊 文件字数统计工具</h1>
 
-    // ✅ Word标准字数统计
-    const countWords = (text) => {
-      if (!text) return 0;
-      
-      const str = String(text);
-      const noSpaces = str.replace(/\s/g, '');
-      
-      if (noSpaces.length === 0) return 0;
-      
-      let wordCount = 0;
-      let i = 0;
-      
-      while (i < noSpaces.length) {
-        const char = noSpaces[i];
-        const code = char.charCodeAt(0);
-        
-        // 中文字符
-        if (code >= 0x4e00 && code <= 0x9fff) {
-          wordCount++;
-          i++;
-        }
-        // 日文假名
-        else if ((code >= 0x3040 && code <= 0x309f) || 
-                 (code >= 0x30a0 && code <= 0x30ff)) {
-          wordCount++;
-          i++;
-        }
-        // 韩文
-        else if (code >= 0xac00 && code <= 0xd7af) {
-          wordCount++;
-          i++;
-        }
-        // 英文/数字：连续的算1个字
-        else if (/[a-zA-Z0-9]/.test(char)) {
-          wordCount++;
-          while (i < noSpaces.length && /[a-zA-Z0-9]/.test(noSpaces[i])) {
-            i++;
-          }
-        }
-        // 中文标点
-        else if (/[，。！？、；：""''（）【】《》〈〉]/.test(char)) {
-          wordCount++;
-          i++;
-        }
-        // 其他字符不计入
-        else {
-          i++;
-        }
+  <!-- 🎯 模式切换 -->
+  <div class="mode-switch">
+    <button class="mode-btn active" onclick="switchMode('single')">
+      📄 单文件模式
+    </button>
+    <button class="mode-btn" onclick="switchMode('multi')">
+      📁 多文件模式
+    </button>
+  </div>
+
+  <!-- 📤 上传区域 -->
+  <div class="upload-area">
+    <label class="upload-label" id="uploadLabel">
+      📤 点击选择文件
+      <input 
+        type="file" 
+        id="fileInput"
+        accept=".docx,.doc,.xlsx,.xls,.pptx,.txt,.md,.csv"
+        onchange="handleFileSelect(event)"
+      />
+    </label>
+  </div>
+
+  <!-- #加载中 -->
+  <div class="loading hidden" id="loading">
+    #正在解析文件...
+  </div>
+
+  <!-- 📊 结果展示 -->
+  <div class="result" id="result"></div>
+</div>
+
+<script>
+  // 🎯 模式
+  let mode = 'single';
+  let items = [];
+
+  // 📊 字数统计（中英文都算）
+  function countWords(text) {
+    if (!text) return 0;
+    const chineseChars = (text.match(/[\u4e00-\u9fa5]/g) || []).length;
+    const englishWords = text.trim().split(/\s+/).filter(w => w.length > 0).length;
+    return chineseChars + englishWords;
+  }
+
+  // 📁 解析单个文件
+  async function parseFile(file) {
+    const ext = file.name.split('.').pop().toLowerCase();
+    let text = '';
+    let fileWords = 0;
+    let icon = '📄';
+
+    try {
+      // 📘 Word 文件
+      if (ext === 'docx' || ext === 'doc') {
+        icon = '📘';
+        const arrayBuffer = await file.arrayBuffer();
+        const result = await mammoth.extractRawText({ arrayBuffer });
+        text = result.value;
+        fileWords = countWords(text);
       }
-      
-      return wordCount;
-    };
-
-    // 解析 PPTX文件
-    const parsePPTX = async (file) => {
-      const zip = await JSZip.loadAsync(file);
-      const slides = [];
-      
-      const slideFiles = Object.keys(zip.files)
-        .filter(name => name.match(/^ppt\/slides\/slide\d+\.xml$/))
-        .sort((a, b) => {
-          const numA = parseInt(a.match(/slide(\d+)/)[1]);
-          const numB = parseInt(b.match(/slide(\d+)/)[1]);
-          return numA - numB;
-        });
-      
-      for (let slideFile of slideFiles) {
-        const content = await zip.files[slideFile].async('string');
-        const textMatches = content.match(/<a:t>([^<]*)<\/a:t>/g);
+      // 📊 Excel 文件
+      else if (ext === 'xlsx' || ext === 'xls') {
+        icon = '📊';
+        const arrayBuffer = await file.arrayBuffer();
+        const workbook = XLSX.read(arrayBuffer, { type: 'array' });
         
-        let slideText = '';
-        if (textMatches) {
-          slideText = textMatches
-            .map(match => match.replace(/<\/?a:t>/g, ''))
-            .join(' ');
-        }
-        
-        const slideNum = slideFile.match(/slide(\d+)/)[1];
-        slides.push({
-          name: `第${slideNum}页`,
-          text: slideText,
-          count: countWords(slideText)
+        let allText = '';
+        workbook.SheetNames.forEach(sheetName => {
+          const worksheet = workbook.Sheets[sheetName];
+          const csv = XLSX.utils.sheet_to_csv(worksheet);
+          allText += csv + ' ';
         });
+        text = allText;
+        fileWords = countWords(text);
       }
-      
-      return slides;
-    };
-
-    function App() {
-      const [mode, setMode] = useState('single'); // 'single' 或 'multi'
-      const [items, setItems] = useState([]);
-      const [fileName, setFileName] = useState('');
-      const [isDragging, setIsDragging] = useState(false);
-      const [fileType, setFileType] = useState('');
-      const fileInputRef = useRef(null);
-
-      // 处理单个文件
-      const processSingleFile = async (file) => {
-        setFileName(file.name);
-        const ext = file.name.split('.').pop().toLowerCase();
+      // 📽️ PPT 文件
+      else if (ext === 'pptx') {
+        icon = '📽️';
+        const arrayBuffer = await file.arrayBuffer();
+        const pptx = new PptxGenJS();
+        pptx.load(arrayBuffer);
         
-        try {
-          if (ext === 'xlsx' || ext === 'xls') {
-            setFileType('excel');
-            const data = await file.arrayBuffer();
-            const workbook = XLSX.read(data, { type: 'array' });
-            
-            const newItems = workbook.SheetNames.map((name, index) => {
-              const worksheet = workbook.Sheets[name];
-              const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: '' });
-              
-              let totalWords = 0;
-              jsonData.forEach(row => {
-                row.forEach(cell => {
-                  totalWords += countWords(cell);
-                });
-              });
-              
-              return {
-                type: 'sheet',
-                name,
-                count: totalWords,
-                index
-              };
-            });
-            
-            setItems(newItems);
-          } 
-          else if (ext === 'pptx') {
-            setFileType('ppt');
-            const slides = await parsePPTX(file);
-            setItems(slides);
-          }
-        } catch (err) {
-          alert('❌ 文件解析失败：' + err.message);
-        }
-      };
-
-      // 处理多个文件
-      const processMultiFiles = async (files) => {
-        setFileName('多文件汇总模式');
-        setFileType('multi');
-        
-        const allItems = [];
-        let totalWords = 0;
-        
-        for (let file of files) {
-          const ext = file.name.split('.').pop().toLowerCase();
-          
-          try {
-            if (ext === 'xlsx' || ext === 'xls') {
-              const data = await file.arrayBuffer();
-              const workbook = XLSX.read(data, { type: 'array' });
-              
-              let fileWords = 0;
-              workbook.SheetNames.forEach(name => {
-                const worksheet = workbook.Sheets[name];
-                const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: '' });
-                
-                jsonData.forEach(row => {
-                  row.forEach(cell => {
-                    fileWords += countWords(cell);
-                  });
-                });
-              });
-              
-              allItems.push({
-                type: 'file',
-                name: file.name,
-                count: fileWords,
-                icon: '📊'
-              });
-              totalWords += fileWords;
-            }
-            else if (ext === 'pptx') {
-              const slides = await parsePPTX(file);
-              const fileWords = slides.reduce((sum, s) => sum + s.count, 0);
-              
-              allItems.push({
-                type: 'file',
-                name: file.name,
-                count: fileWords,
-                icon: '📽️'
-              });
-              totalWords += fileWords;
-            }
-          } catch (err) {
-            console.error(err);
-          }
-        }
-        
-        setItems(allItems);
-        // 在多文件模式下，总字数直接显示在items里
-        setItems(prev => [...prev, {
-          type: 'total',
-          name: '总计',
-          count: totalWords,
-          icon: '📈'
-        }]);
-      };
-
-      const handleFileUpload = (e) => {
-        const file = e.target.files[0];
-        if (file) {
-          if (mode === 'single') {
-            processSingleFile(file);
-          } else {
-            processMultiFiles([file]);
-          }
-        }
-      };
-
-      const handleDrop = (e) => {
-        e.preventDefault();
-        setIsDragging(false);
-        const files = e.dataTransfer.files;
-        if (files.length > 0) {
-          if (mode === 'single') {
-            processSingleFile(files[0]);
-          } else {
-            processMultiFiles(Array.from(files));
-          }
-        }
-      };
-
-      const handleDragOver = (e) => {
-        e.preventDefault();
-        setIsDragging(true);
-      };
-
-      const handleDragLeave = () => {
-        setIsDragging(false);
-      };
-
-      const deleteItem = (index) => {
-        setItems(items.filter((_, i) => i !== index));
-      };
-
-      const totalCount = items.length > 0 
-        ? items.find(item => item.type === 'total')?.count || 0
-        : 0;
-
-      const copyToClipboard = (text) => {
-        navigator.clipboard.writeText(text).then(() => {
-          alert('✅ 已复制到剪贴板！');
+        let allText = '';
+        pptx.slides.forEach(slide => {
+          slide.objects.forEach(obj => {
+            if (obj.text) allText += obj.text + ' ';
+          });
         });
-      };
-
-      return (
-        <div className="container">
-          <h1>📊 Office字数统计工具</h1>
-          <p className="subtitle">支持 Excel (.xlsx/.xls) 和 PPT (.pptx) | Word标准字数统计</p>
-          
-          {/* 🎯 模式切换 */}
-          <div className="mode-switcher">
-            <button 
-              className={`mode-btn ${mode === 'single' ? 'active' : ''}`}
-              onClick={() => { setMode('single'); setItems([]); }}
-            >
-              📄 单文件明细模式
-            </button>
-            <button 
-              className={`mode-btn ${mode === 'multi' ? 'active' : ''}`}
-              onClick={() => { setMode('multi'); setItems([]); }}
-            >
-              📁 多文件汇总模式
-            </button>
-          </div>
-          
-          <div 
-            className={`upload-zone ${isDragging ? 'dragging' : ''}`}
-            onClick={() => fileInputRef.current.click()}
-            onDrop={handleDrop}
-            onDragOver={handleDragOver}
-            onDragLeave={handleDragLeave}
-          >
-            <div className="upload-icon">📁</div>
-            <div className="upload-text">
-              {mode === 'single' ? '点击或拖拽单个文件到此处' : '点击或拖拽多个文件到此处'}
-            </div>
-            <div className="upload-hint">
-              {mode === 'single' 
-                ? '支持 Excel (.xlsx/.xls) 和 PPT (.pptx) 格式' 
-                : '可同时选择多个文件，只显示总字数'}
-            </div>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept=".xlsx,.xls,.pptx"
-              multiple={mode === 'multi'}
-              onChange={(e) => {
-                const files = e.target.files;
-                if (files.length > 0) {
-                  if (mode === 'single') {
-                    processSingleFile(files[0]);
-                  } else {
-                    processMultiFiles(Array.from(files));
-                  }
-                }
-              }}
-            />
-          </div>
-
-          {/* 📄 单文件明细模式 */}
-          {mode === 'single' && items.length > 0 && (
-            <>
-              <div style={{ marginTop: '30px' }}>
-                <h2 style={{ marginBottom: '15px', color: '#333' }}>
-                  📄 {fileName}
-                  <span className={`badge ${fileType === 'excel' ? 'badge-excel' : fileType === 'ppt' ? 'badge-ppt' : ''}`}>
-                    {fileType === 'excel' ? '📊 Excel' : fileType === 'ppt' ? '📽️ PPT' : ''}
-                  </span>
-                </h2>
-                
-                {items.map((item, index) => (
-                  <div className="item" key={index}>
-                    <div>
-                      <div className="item-name">
-                        {item.type === 'sheet' ? '📋 Sheet: ' : '🎬 '}
-                        {item.name}
-                      </div>
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
-                      <div className="word-count">{item.count.toLocaleString()} 字</div>
-                      <button
-                        className="copy-btn"
-                        onClick={() => copyToClipboard(item.count.toString())}
-                      >
-                        📋 复制
-                      </button>
-                      <button
-                        className="delete-btn"
-                        onClick={() => deleteItem(index)}
-                      >
-                        🗑️ 删除
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              <div className="total-section">
-                <div style={{ fontSize: '18px', marginBottom: '10px' }}>📚 总字数（Word标准）</div>
-                <div className="total-count">
-                  {items.reduce((sum, item) => sum + item.count, 0).toLocaleString()} 字
-                </div>
-                <button 
-                  className="copy-btn"
-                  onClick={() => copyToClipboard(items.reduce((sum, item) => sum + item.count, 0).toString())}
-                  style={{ marginTop: '15px' }}
-                >
-                  📋 复制总字数
-                </button>
-              </div>
-            </>
-          )}
-
-          {/* 📁 多文件汇总模式 */}
-          {mode === 'multi' && items.length > 0 && (
-            <>
-              <div style={{ marginTop: '30px' }}>
-                <h2 style={{ marginBottom: '15px', color: '#333' }}>
-                  📁 多文件汇总
-                  <span className="badge badge-multi">批量模式</span>
-                </h2>
-                
-                <div className="file-list">
-                  {items.filter(item => item.type !== 'total').map((item, index) => (
-                    <div className="file-item" key={index}>
-                      <div className="file-info">
-                        <div className="file-icon">{item.icon}</div>
-                        <div className="file-name">{item.name}</div>
-                      </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
-                        <div className="file-count">{item.count.toLocaleString()} 字</div>
-                        <button
-                          className="file-delete"
-                          onClick={() => deleteItem(index)}
-                        >
-                          🗑️ 删除
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-
-                <div className="total-section">
-                  <div style={{ fontSize: '18px', marginBottom: '10px' }}>📚 所有文件总字数（Word标准）</div>
-                  <div className="total-count">{totalCount.toLocaleString()} 字</div>
-                  <button 
-                    className="copy-btn"
-                    onClick={() => copyToClipboard(totalCount.toString())}
-                    style={{ marginTop: '15px' }}
-                  >
-                    📋 复制总字数
-                  </button>
-                </div>
-              </div>
-            </>
-          )}
-
-          <div className="footer">
-            {mode === 'single' 
-              ? '💡 提示：单文件模式显示各个Sheet/Slide明细 | 点击 🗑️ 删除可移除' 
-              : '💡 提示：多文件模式支持批量上传，只显示总字数 | 点击 🗑️ 删除可移除文件'}
-          </div>
-        </div>
-      );
+        text = allText;
+        fileWords = countWords(text);
+      }
+      // 📄 文本文件
+      else if (['txt', 'md', 'csv'].includes(ext)) {
+        icon = '📄';
+        text = await file.text();
+        fileWords = countWords(text);
+      }
+      else {
+        throw new Error('不支持的格式');
+      }
+    } catch (error) {
+      console.error('解析失败:', file.name, error);
+      return { name: file.name, count: 0, icon: '❌', error: error.message };
     }
 
-    ReactDOM.render(<App />, document.getElementById('root'));
-  </script>
+    return { name: file.name, count: fileWords, icon };
+  }
+
+  // 🎯 切换模式
+  function switchMode(newMode) {
+    mode = newMode;
+    const btns = document.querySelectorAll('.mode-btn');
+    btns.forEach((btn, i) => {
+      btn.classList.toggle('active', (i === 0 && mode === 'single') || (i === 1 && mode === 'multi'));
+    });
+
+    const input = document.getElementById('fileInput');
+    if (mode === 'multi') {
+      input.multiple = true;
+      document.getElementById('uploadLabel').innerHTML = '📤 点击选择多个文件<input type="file" id="fileInput" multiple accept=".docx,.doc,.xlsx,.xls,.pptx,.txt,.md,.csv" onchange="handleFileSelect(event)"/>';
+    } else {
+      input.multiple = false;
+      document.getElementById('uploadLabel').innerHTML = '📤 点击选择单个文件<input type="file" id="fileInput" accept=".docx,.doc,.xlsx,.xls,.pptx,.txt,.md,.csv" onchange="handleFileSelect(event)"/>';
+    }
+    
+    items = [];
+    document.getElementById('result').innerHTML = '';
+  }
+
+  // 📁 处理文件
+  async function handleFileSelect(event) {
+    const files = event.target.files;
+    if (!files.length) return;
+
+    document.getElementById('loading').classList.remove('hidden');
+    document.getElementById('result').innerHTML = '';
+    items = [];
+
+    let totalWords = 0;
+
+    for (let file of files) {
+      const item = await parseFile(file);
+      items.push(item);
+      totalWords += item.count;
+    }
+
+    // 显示结果
+    let html = '';
+    items.forEach((item, index) => {
+      html += `
+        <div class="result-item">
+          <span class="result-icon">${item.icon}</span>
+          <span class="result-name">${item.name}</span>
+          <span class="result-count">${item.count.toLocaleString()} 字</span>
+        </div>
+      `;
+    });
+
+    // 总计
+    html += `
+      <div class="result-item total">
+        <span class="result-icon">📊</span>
+        <span class="result-name">总计</span>
+        <span class="result-count">${totalWords.toLocaleString()} 字</span>
+      </div>
+    `;
+
+    document.getElementById('result').innerHTML = html;
+    document.getElementById('loading').classList.add('hidden');
+  }
+</script>
+
 </body>
 </html>
